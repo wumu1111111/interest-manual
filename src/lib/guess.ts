@@ -2,87 +2,58 @@ import { QUESTIONS } from "./quiz-data";
 import { AXIS_ORDER } from "./score";
 import type { Axis, AxisQuestion, ProfilePayload } from "./types";
 
-/** 老链接（没有 ga 字段）用它兜底：每轴 3 道固定的二选一 */
-export const GUESS_IDS = [
-  "a1",
-  "b1",
-  "c5",
-  "d1",
-  "a2",
-  "b3",
-  "c2",
-  "d5",
-  "a6",
-  "b4",
-  "c4",
-  "d6",
-] as const;
-
-const BY_ID = new Map(QUESTIONS.map((question) => [question.id, question]));
-
-export const GUESS_QUESTIONS = GUESS_IDS.map((id) => BY_ID.get(id)).filter(
-  (question): question is AxisQuestion => question?.kind === "axis",
-);
-
-/** 全部 32 道四轴题 */
+/** 全部 32 道四轴陈述句，顺序与 `r` 字段一致 */
 const AXIS_QUESTIONS = QUESTIONS.filter(
   (question): question is AxisQuestion => question.kind === "axis",
 );
-const AXIS_COUNT = AXIS_QUESTIONS.length;
 
-/** 答题时把 32 道四轴题的答案记成 0/1 串，塞进分享链接 */
-export function allAxisBits(choices: Record<string, string>): number[] {
-  return AXIS_QUESTIONS.map((question) => {
-    const index = question.options.findIndex(
-      (option) => option.id === choices[question.id],
-    );
-    return index === 1 ? 1 : 0;
-  });
+/** 答题时把每题的认同度（-2..2）编码成 0..4 的数字串，塞进分享链接 */
+export function ratingsFromAnswers(answers: Record<string, number>): string {
+  return AXIS_QUESTIONS.map((question) =>
+    String((answers[question.id] ?? 0) + 2),
+  ).join("");
 }
 
-/** 老字段 g：固定 12 题各自的选项下标 */
-export function bitsFromChoices(choices: Record<string, string>): number[] {
-  return GUESS_QUESTIONS.map((question) => {
-    const index = question.options.findIndex(
-      (option) => option.id === choices[question.id],
-    );
-    return index === 1 ? 1 : 0;
-  });
-}
-
-function allBits(payload: ProfilePayload): number[] | null {
-  if (typeof payload.ga === "string" && payload.ga.length === AXIS_COUNT) {
-    return [...payload.ga].map((char) => (char === "1" ? 1 : 0));
+/** 读出每题的认同度；老链接没有 r 字段时，按四轴分数反推一个大概态度 */
+export function ratingsOf(payload: ProfilePayload): number[] {
+  if (
+    typeof payload.r === "string" &&
+    payload.r.length === AXIS_QUESTIONS.length
+  ) {
+    return [...payload.r].map((char) => Number(char) - 2);
   }
-  return null;
+
+  return AXIS_QUESTIONS.map((question) => {
+    const axisIndex = AXIS_ORDER.indexOf(question.axis);
+    const score = payload.a[axisIndex] ?? 0;
+    return Math.max(
+      -2,
+      Math.min(2, Math.round(score * question.direction * 2)),
+    );
+  });
+}
+
+interface Candidate {
+  question: AxisQuestion;
+  index: number;
+  rating: number;
+  rank: number;
 }
 
 /**
- * 按这份说明书挑 12 道题。
+ * 挑出让人猜的题。
  *
- * 优先级：先挑「和类型相反」的答案（最出乎意料），再挑分数接近中线的（最难猜）。
- * 每轴 3 道，保证四个方面都覆盖到。
+ * 只挑「有明确立场」的（|认同度| >= 1），中立题没法猜对错。
+ * 排序：先挑和类型相反的（最出乎意料），再看立场有多强。
+ * 每轴最多 3 道，四轴交错排列。
  */
 export function guessQuestionsFor(payload: ProfilePayload): {
   list: AxisQuestion[];
-  bits: number[];
+  ratings: number[];
   personalized: boolean;
 } {
-  const all = allBits(payload);
-
-  if (!all) {
-    // 老链接：固定 12 题
-    const bits = Array.isArray(payload.g) && payload.g.length === GUESS_QUESTIONS.length
-      ? payload.g.map((value) => (value === 1 ? 1 : 0))
-      : GUESS_QUESTIONS.map((question) => {
-          const axisIndex = AXIS_ORDER.indexOf(question.axis);
-          const target = (payload.a[axisIndex] ?? 0) <= 0 ? -1 : 1;
-          return question.options.findIndex((option) => option.value === target) === 1 ? 1 : 0;
-        });
-    return { list: GUESS_QUESTIONS, bits, personalized: false };
-  }
-
-  const buckets: Record<Axis, { question: AxisQuestion; index: number; rank: number }[]> = {
+  const ratings = ratingsOf(payload);
+  const buckets: Record<Axis, Candidate[]> = {
     field: [],
     social: [],
     mode: [],
@@ -90,64 +61,67 @@ export function guessQuestionsFor(payload: ProfilePayload): {
   };
 
   AXIS_QUESTIONS.forEach((question, index) => {
-    const axisIndex = AXIS_ORDER.indexOf(question.axis);
-    const score = payload.a[axisIndex] ?? 0;
-    const target = score <= 0 ? -1 : 1;
-    const chosen = question.options[all[index]].value;
-    // 和类型相反＝意料之外；分数越接近 0＝越难猜
-    const surprise = chosen === target ? 0 : 1;
-    const ambiguity = 1 - Math.min(1, Math.abs(score));
+    const rating = ratings[index];
+    if (Math.abs(rating) < 1) return;
+    const surprise = Math.sign(rating) === question.direction ? 0 : 1;
     buckets[question.axis].push({
       question,
       index,
-      rank: surprise * 2 + ambiguity,
+      rating,
+      rank: surprise * 2 + Math.abs(rating) / 2,
     });
   });
 
-  const picked: { question: AxisQuestion; index: number }[] = [];
-  for (const axis of AXIS_ORDER) {
-    const top = buckets[axis]
-      .sort((a, b) => b.rank - a.rank)
-      .slice(0, 3);
-    picked.push(...top.map(({ question, index }) => ({ question, index })));
-  }
-  // 按四轴顺序取，再交错打散，避免连续三道都在同一维度
-  const interleaved: typeof picked = [];
+  const perAxis = AXIS_ORDER.map((axis) =>
+    buckets[axis].sort((a, b) => b.rank - a.rank).slice(0, 3),
+  );
+
+  // 四轴交错：第 1 轮取每轴第 1 道，第 2 轮取第 2 道……
+  const ordered: Candidate[] = [];
   for (let round = 0; round < 3; round += 1) {
-    for (let axis = 0; axis < 4; axis += 1) {
-      const item = picked[axis * 3 + round];
-      if (item) interleaved.push(item);
+    for (const list of perAxis) {
+      if (list[round]) ordered.push(list[round]);
     }
   }
 
   return {
-    list: interleaved.map((item) => item.question),
-    bits: interleaved.map((item) => all[item.index]),
-    personalized: true,
+    list: ordered.map((item) => item.question),
+    ratings: ordered.map((item) => item.rating),
+    personalized: typeof payload.r === "string",
   };
 }
 
 export interface GuessDetail {
   question: AxisQuestion;
+  /** 朋友猜的：1 = 会同意，-1 = 不会 */
   picked: number | undefined;
+  /** 本人实际的认同度，-2..2 */
   actual: number;
   correct: boolean;
 }
 
 export function scoreGuess(
   payload: ProfilePayload,
-  answers: Record<string, number>,
-): { correct: number; total: number; detail: GuessDetail[]; personalized: boolean } {
-  const { list, bits, personalized } = guessQuestionsFor(payload);
+  guesses: Record<string, number>,
+): {
+  correct: number;
+  total: number;
+  detail: GuessDetail[];
+  personalized: boolean;
+} {
+  const { list, ratings, personalized } = guessQuestionsFor(payload);
+
   const detail: GuessDetail[] = list.map((question, index) => {
-    const picked = answers[question.id];
+    const actual = ratings[index];
+    const picked = guesses[question.id];
     return {
       question,
       picked,
-      actual: bits[index],
-      correct: picked === bits[index],
+      actual,
+      correct: picked === Math.sign(actual),
     };
   });
+
   return {
     correct: detail.filter((item) => item.correct).length,
     total: list.length,
@@ -161,10 +135,10 @@ export function verdict(
   total: number,
 ): { title: string; body: string } {
   const ratio = total ? correct / total : 0;
-  if (correct === total) {
+  if (total > 0 && correct === total) {
     return {
       title: "你是真的懂 TA",
-      body: "12 题全对。这种了解度，基本可以替 TA 安排周末了。",
+      body: "全对。这种了解度，基本可以替 TA 安排周末了。",
     };
   }
   if (ratio >= 0.8) {

@@ -3,29 +3,33 @@ import type { Axis, ProfilePayload } from "./types";
 
 export const AXIS_ORDER: Axis[] = ["field", "social", "mode", "tempo"];
 
-/** 选项 id -> 所属轴与方向 */
-const OPTION_INDEX = new Map<string, { axis: Axis; value: number }>();
+/** 题 id -> 所属轴与这句话指向的方向 */
+const AXIS_INDEX = new Map<string, { axis: Axis; direction: number }>();
 for (const q of QUESTIONS) {
-  if (q.kind === "axis") {
-    for (const o of q.options) OPTION_INDEX.set(o.id, { axis: q.axis, value: o.value });
-  }
+  if (q.kind === "axis") AXIS_INDEX.set(q.id, { axis: q.axis, direction: q.direction });
 }
 
-/** 四轴得分，范围 -1..1，0 附近表示两端均衡 */
-export function axisScores(choices: Record<string, string>): number[] {
+/**
+ * 四轴得分，范围 -1..1。
+ *
+ * 每题是 -2..2 的认同度，乘上这句话的方向后求和。
+ * 中间档 0 表示"两边都行 / 都说不好"，不会把结果往任何一端推。
+ */
+export function axisScores(answers: Record<string, number>): number[] {
   const sum: Record<Axis, number> = { field: 0, social: 0, mode: 0, tempo: 0 };
   const count: Record<Axis, number> = { field: 0, social: 0, mode: 0, tempo: 0 };
 
-  for (const optionId of Object.values(choices)) {
-    const hit = OPTION_INDEX.get(optionId);
-    if (!hit) continue;
-    sum[hit.axis] += hit.value;
+  for (const [questionId, value] of Object.entries(answers)) {
+    const hit = AXIS_INDEX.get(questionId);
+    if (!hit || typeof value !== "number") continue;
+    sum[hit.axis] += hit.direction * value;
     count[hit.axis] += 1;
   }
 
   return AXIS_ORDER.map((axis) => {
     if (count[axis] === 0) return 0;
-    return Math.round((sum[axis] / count[axis]) * 100) / 100;
+    // 每题最大贡献 2 分，所以除以 2 * 题数
+    return Math.round((sum[axis] / (2 * count[axis])) * 100) / 100;
   });
 }
 

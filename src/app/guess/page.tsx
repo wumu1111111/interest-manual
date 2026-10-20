@@ -15,7 +15,7 @@ export async function generateMetadata({
   const who = payload?.n?.trim() || "你的朋友";
   return {
     title: `猜猜${who} · 兴趣说明书`,
-    description: "12 道二选一，看看你到底有多懂 TA。",
+    description: "从 TA 的答卷里挑几道最容易猜错的陈述句，看看你到底有多懂 TA。",
   };
 }
 

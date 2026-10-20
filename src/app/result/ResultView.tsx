@@ -392,7 +392,7 @@ export default function ResultView({
         />
         <h2 className="font-serif text-xl">让朋友猜猜你</h2>
         <p className="mt-2 max-w-[24rem] text-[12px] leading-6 text-muted">
-          12 道二选一，看看谁真的懂{who}。猜完他们会看到这一页。
+          从{who}的答卷里挑几道最容易猜错的，看看你有多懂。
         </p>
         <div className="relative max-w-[24rem]">
           <ShareBar

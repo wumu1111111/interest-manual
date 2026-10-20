@@ -1,19 +1,16 @@
 /** 四轴：场域 / 社交 / 姿态 / 节奏 */
 export type Axis = "field" | "social" | "mode" | "tempo";
 
-export interface AxisOption {
-  id: string;
-  label: string;
-  /** -1 = 左端（室内/独处/创造/深潜），+1 = 右端（户外/结伴/体验/广谱） */
-  value: -1 | 1;
-}
-
 export interface AxisQuestion {
   id: string;
   kind: "axis";
   axis: Axis;
-  prompt: string;
-  options: AxisOption[];
+  /** 一句陈述，用户对它的认同度决定这一轴的偏移 */
+  statement: string;
+  /** 这句话指向哪一端：-1 = 左端（室内/独处/创造/深潜），+1 = 右端 */
+  direction: -1 | 1;
+  /** 属于哪一档：1 快速版 / 2 标准版 / 3 深度版 */
+  tier?: 1 | 2 | 3;
 }
 
 export interface MultiQuestion {
@@ -24,6 +21,7 @@ export interface MultiQuestion {
   hint?: string;
   max: number;
   options: { id: string; label: string }[];
+  tier?: 1 | 2 | 3;
 }
 
 export interface SingleQuestion {
@@ -33,6 +31,7 @@ export interface SingleQuestion {
   prompt: string;
   hint?: string;
   options: { id: string; label: string }[];
+  tier?: 1 | 2 | 3;
 }
 
 export interface TextQuestion {
@@ -43,6 +42,7 @@ export interface TextQuestion {
   hint?: string;
   placeholder: string;
   maxLength: number;
+  tier?: 1 | 2 | 3;
 }
 
 export type Question = AxisQuestion | MultiQuestion | SingleQuestion | TextQuestion;
@@ -73,6 +73,11 @@ export interface ProfilePayload {
   g?: number[];
   /** 全部 32 道四轴题的答案，0/1 拼成的 32 位字符串，用来按类型挑题 */
   ga?: string;
+  /**
+   * 32 道认同度，每题的 -2..2 加 2 后拼成 "0"-"4" 的字符串。
+   * 默契测试靠它挑题和判分。
+   */
+  r?: string;
 }
 
 export interface TypeProfile {

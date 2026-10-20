@@ -3,10 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { guessQuestionsFor, scoreGuess, verdict } from "@/lib/guess";
+import { SCALE } from "@/lib/quiz-data";
 import type { ProfilePayload } from "@/lib/types";
 import ShareBar from "@/components/share-bar";
 import Mascot, { MascotHead } from "@/components/mascot";
 import { Sparkle } from "@/components/doodles";
+
+/** -2..2 的认同度 -> "很同意" 之类的文案 */
+function scaleLabel(value: number): string {
+  const hit = SCALE.find((level) => level.value === Math.round(value));
+  return hit ? hit.label : "说不好";
+}
 
 export default function GuessClient({
   payload,
@@ -16,7 +23,8 @@ export default function GuessClient({
   encoded: string;
 }) {
   const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  /** 朋友猜的：1 = 会同意，-1 = 不会 */
+  const [guesses, setGuesses] = useState<Record<string, number>>({});
   const lockRef = useRef(false);
 
   // 按这份说明书挑题：优先挑"和类型相反"以及"分数接近中线"的题
@@ -33,10 +41,10 @@ export default function GuessClient({
   }, [index]);
 
   const pick = useCallback(
-    (questionId: string, optionIndex: number) => {
+    (questionId: string, guess: number) => {
       if (lockRef.current) return;
       lockRef.current = true;
-      setAnswers((prev) => ({ ...prev, [questionId]: optionIndex }));
+      setGuesses((prev) => ({ ...prev, [questionId]: guess }));
       window.setTimeout(() => {
         setIndex((current) => Math.min(current + 1, total));
       }, 160);
@@ -53,19 +61,15 @@ export default function GuessClient({
         return;
       }
       const pressed = Number(event.key);
-      if (
-        Number.isInteger(pressed) &&
-        pressed >= 1 &&
-        pressed <= question.options.length
-      ) {
-        pick(question.id, pressed - 1);
+      if (pressed === 1 || pressed === 2) {
+        pick(question.id, pressed === 1 ? 1 : -1);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [question, pick]);
 
-  const result = useMemo(() => scoreGuess(payload, answers), [payload, answers]);
+  const result = useMemo(() => scoreGuess(payload, guesses), [payload, guesses]);
   const score = result.total
     ? Math.round((result.correct / result.total) * 100)
     : 0;
@@ -73,7 +77,7 @@ export default function GuessClient({
   const progress = Math.round((Math.min(index, total) / total) * 100);
 
   const reset = () => {
-    setAnswers({});
+    setGuesses({});
     setIndex(0);
   };
 
@@ -115,25 +119,28 @@ export default function GuessClient({
                 第 {index + 1} 题 / {total} · 你觉得{name}会怎么选
               </p>
               <h1 className="mt-3 font-serif text-[1.5rem] leading-snug sm:text-[1.8rem]">
-                {question.prompt}
+                {question.statement}
               </h1>
               {chosen.personalized ? (
                 <p className="mt-2 text-[11px] text-accent/80">
-                  这 12 题按{name}的类型挑的，专挑最容易猜错的
+                  这几题按{name}的答卷挑的，专挑最容易猜错的
                 </p>
               ) : null}
 
-              <div className="mt-7 space-y-3">
-                {question.options.map((option, optionIndex) => (
+              <div className="mt-7 grid grid-cols-2 gap-3">
+                {[
+                  { value: 1, label: `${name}会同意`, mark: "1" },
+                  { value: -1, label: `${name}不会同意`, mark: "2" },
+                ].map((option) => (
                   <button
-                    key={option.id}
-                    onClick={() => pick(question.id, optionIndex)}
-                    className="option flex w-full items-center gap-4 rounded-2xl border border-line bg-white px-5 py-4 text-left"
+                    key={option.value}
+                    onClick={() => pick(question.id, option.value)}
+                    className="option flex flex-col items-center gap-2 rounded-2xl border border-line bg-white px-4 py-5 text-center"
                   >
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-line font-mono text-[10px] text-muted">
-                      {optionIndex + 1}
+                    <span className="flex size-6 items-center justify-center rounded-full border border-line font-mono text-[10px] text-muted">
+                      {option.mark}
                     </span>
-                    <span className="text-[15px] leading-7">{option.label}</span>
+                    <span className="text-[15px] leading-6">{option.label}</span>
                   </button>
                 ))}
               </div>
@@ -173,7 +180,7 @@ export default function GuessClient({
                   <span className="ml-1 text-lg text-muted">%</span>
                 </p>
                 <p className="mt-3 text-[13px] text-muted">
-                  12 题猜对 {result.correct} 题
+                  {result.total} 题猜对 {result.correct} 题
                 </p>
                 {result.personalized ? (
                   <p className="mt-1 text-[11px] text-muted/80">
@@ -210,7 +217,7 @@ export default function GuessClient({
                 {result.detail.map((item) => (
                   <li key={item.question.id} className="py-3">
                     <p className="text-[11px] leading-5 text-muted">
-                      {item.question.prompt}
+                      {item.question.statement}
                     </p>
                     <p className="mt-1 text-[13px] leading-6">
                       <span
@@ -219,15 +226,11 @@ export default function GuessClient({
                         {item.correct ? "猜对" : "猜错"}
                       </span>
                       <span className="text-muted">
-                        {" · "}你猜「
-                        {item.picked !== undefined
-                          ? item.question.options[item.picked].label
-                          : "—"}
-                        」
+                        {" · "}你猜 TA {item.picked === 1 ? "会" : "不会"}同意
                       </span>
                       {!item.correct ? (
                         <span className="text-ink">
-                          ，{name}选「{item.question.options[item.actual].label}」
+                          ，TA 其实「{scaleLabel(item.actual)}」
                         </span>
                       ) : null}
                     </p>
@@ -256,7 +259,7 @@ export default function GuessClient({
                   把这条发给别的朋友，看看谁最懂{name}。
                 </p>
                 <ShareBar
-                  text={`我猜${name}的 12 个选择，对了 ${result.correct} 题，默契度 ${score}%。你敢试试吗？`}
+                  text={`我猜${name}的 ${result.total} 个选择，对了 ${result.correct} 题，默契度 ${score}%。你敢试试吗？`}
                 />
               </div>
 

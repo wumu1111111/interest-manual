@@ -1,4 +1,4 @@
-import type { Axis, Question } from "./types";
+import type { Axis, AxisQuestion, Question } from "./types";
 
 export const AXES: Record<
   Axis,
@@ -35,336 +35,125 @@ export const AXES: Record<
   },
 };
 
-/** 32 道四轴题：每轴 8 题，两端各 4 题，选项位置交替左右，避免顺序偏差 */
-const AXIS_QUESTIONS: Question[] = [
-  // ── 场域：I 室内 / O 户外 ──
-  {
-    id: "a1",
-    kind: "axis",
-    axis: "field",
-    prompt: "突然多出一个没安排的周六，你会…",
-    options: [
-      { id: "a1L", label: "把家里某个角落重新弄一遍", value: -1 },
-      { id: "a1R", label: "出门随便走走，走到哪算哪", value: 1 },
-    ],
-  },
-  {
-    id: "a2",
-    kind: "axis",
-    axis: "field",
-    prompt: "天气特别好的下午，你第一反应是…",
-    options: [
-      { id: "a2L", label: "这种天不该待在屋里", value: 1 },
-      { id: "a2R", label: "正好开窗，泡点东西坐下", value: -1 },
-    ],
-  },
-  {
-    id: "a3",
-    kind: "axis",
-    axis: "field",
-    prompt: "约朋友见面，你更希望这个局…",
-    options: [
-      { id: "a3L", label: "在谁家里，穿睡衣也行", value: -1 },
-      { id: "a3R", label: "在户外，边走边聊", value: 1 },
-    ],
-  },
-  {
-    id: "a4",
-    kind: "axis",
-    axis: "field",
-    prompt: "空出来的两个小时，你更想…",
-    options: [
-      { id: "a4L", label: "去一条没走过的路", value: 1 },
-      { id: "a4R", label: "去一家有意思的店里坐着", value: -1 },
-    ],
-  },
-  {
-    id: "a5",
-    kind: "axis",
-    axis: "field",
-    prompt: "你的相册里更多的是…",
-    options: [
-      { id: "a5L", label: "房间里的光、桌上的东西、吃的", value: -1 },
-      { id: "a5R", label: "天空、街道、山和海", value: 1 },
-    ],
-  },
-  {
-    id: "a6",
-    kind: "axis",
-    axis: "field",
-    prompt: "出门玩了一整天，回家前你更想…",
-    options: [
-      { id: "a6L", label: "再走一段，把劲儿散掉", value: 1 },
-      { id: "a6R", label: "找个安静地方先坐一会儿", value: -1 },
-    ],
-  },
-  {
-    id: "a7",
-    kind: "axis",
-    axis: "field",
-    prompt: "想学一样新东西，你更愿意…",
-    options: [
-      { id: "a7L", label: "在家看教程，自己慢慢试", value: -1 },
-      { id: "a7R", label: "报个线下班，去现场摸", value: 1 },
-    ],
-  },
-  {
-    id: "a8",
-    kind: "axis",
-    axis: "field",
-    prompt: "你更受不了的是…",
-    options: [
-      { id: "a8L", label: "连着好几天没出过门", value: 1 },
-      { id: "a8R", label: "连着好几天在外面跑", value: -1 },
-    ],
-  },
+/**
+ * 五级认同度。中间档是有意义的：既可以是"两边都行"，也可以是"两边都不想要"，
+ * 所以不再逼用户二选一。
+ */
+export const SCALE = [
+  { value: -2, label: "很不同意", short: "很不同意" },
+  { value: -1, label: "不同意", short: "不同意" },
+  { value: 0, label: "都行", short: "都行" },
+  { value: 1, label: "同意", short: "同意" },
+  { value: 2, label: "很同意", short: "很同意" },
+] as const;
 
-  // ── 社交：S 独处 / G 结伴 ──
-  {
-    id: "b1",
-    kind: "axis",
-    axis: "social",
-    prompt: "周五晚上，你更想要…",
-    options: [
-      { id: "b1L", label: "一个人，谁也别找我", value: -1 },
-      { id: "b1R", label: "有人一起，干什么都行", value: 1 },
-    ],
-  },
-  {
-    id: "b2",
-    kind: "axis",
-    axis: "social",
-    prompt: "你更享受的那种快乐是…",
-    options: [
-      { id: "b2L", label: "一群人闹到一起", value: 1 },
-      { id: "b2R", label: "一个人把事做完的踏实", value: -1 },
-    ],
-  },
-  {
-    id: "b3",
-    kind: "axis",
-    axis: "social",
-    prompt: "去一个只认识主人的饭局，你会…",
-    options: [
-      { id: "b3L", label: "先找个角落观察一下", value: -1 },
-      { id: "b3R", label: "主动找人搭话", value: 1 },
-    ],
-  },
-  {
-    id: "b4",
-    kind: "axis",
-    axis: "social",
-    prompt: "旅行你更愿意…",
-    options: [
-      { id: "b4L", label: "拉上一伙人", value: 1 },
-      { id: "b4R", label: "一个人说走就走", value: -1 },
-    ],
-  },
-  {
-    id: "b5",
-    kind: "axis",
-    axis: "social",
-    prompt: "遇到特别想分享的东西，你…",
-    options: [
-      { id: "b5L", label: "先自己消化，过几天才提", value: -1 },
-      { id: "b5R", label: "马上发给某个人", value: 1 },
-    ],
-  },
-  {
-    id: "b6",
-    kind: "axis",
-    axis: "social",
-    prompt: "你更舒服的状态是…",
-    options: [
-      { id: "b6L", label: "认识很多人，随时能约到人", value: 1 },
-      { id: "b6R", label: "有几个能深聊的，但不用常见", value: -1 },
-    ],
-  },
-  {
-    id: "b7",
-    kind: "axis",
-    axis: "social",
-    prompt: "和很多人待了一整天，你…",
-    options: [
-      { id: "b7L", label: "需要独处很久才能回血", value: -1 },
-      { id: "b7R", label: "还挺兴奋，想接着聊", value: 1 },
-    ],
-  },
-  {
-    id: "b8",
-    kind: "axis",
-    axis: "social",
-    prompt: "你更受不了的是…",
-    options: [
-      { id: "b8L", label: "一整个周末没人说话", value: 1 },
-      { id: "b8R", label: "一整个周末都在应酬", value: -1 },
-    ],
-  },
+/** 题量分档：数字越大，每轴题越多，结果越稳 */
+export type QuizMode = "quick" | "standard" | "deep";
 
-  // ── 姿态：M 创造 / T 体验 ──
+export const QUIZ_MODES: {
+  key: QuizMode;
+  label: string;
+  desc: string;
+  tier: 1 | 2 | 3;
+}[] = [
   {
-    id: "c1",
-    kind: "axis",
-    axis: "mode",
-    prompt: "看到一件特别好看的东西，你更想…",
-    options: [
-      { id: "c1L", label: "弄清楚它怎么做的，甚至自己试", value: -1 },
-      { id: "c1R", label: "好好欣赏，或者买下来", value: 1 },
-    ],
+    key: "quick",
+    label: "快速版",
+    desc: "每轴 4 句，先看看自己大概是什么人",
+    tier: 1,
   },
   {
-    id: "c2",
-    kind: "axis",
-    axis: "mode",
-    prompt: "你刷到的内容里更多是…",
-    options: [
-      { id: "c2L", label: "「我去了 / 我吃了 / 我看了」", value: 1 },
-      { id: "c2R", label: "「怎么做出一个…」", value: -1 },
-    ],
+    key: "standard",
+    label: "标准版",
+    desc: "每轴 8 句，精度和时间的平衡点",
+    tier: 2,
   },
   {
-    id: "c3",
-    kind: "axis",
-    axis: "mode",
-    prompt: "一趟旅行回来，你更可能…",
-    options: [
-      { id: "c3L", label: "做本小册子，或者剪条视频", value: -1 },
-      { id: "c3R", label: "存一堆照片，偶尔翻翻", value: 1 },
-    ],
-  },
-  {
-    id: "c4",
-    kind: "axis",
-    axis: "mode",
-    prompt: "你更享受哪一下…",
-    options: [
-      { id: "c4L", label: "遇到好东西的惊喜", value: 1 },
-      { id: "c4R", label: "把想法变成实物", value: -1 },
-    ],
-  },
-  {
-    id: "c5",
-    kind: "axis",
-    axis: "mode",
-    prompt: "朋友会说你是…",
-    options: [
-      { id: "c5L", label: "总在折腾点什么的人", value: -1 },
-      { id: "c5R", label: "很会玩、很会挑的人", value: 1 },
-    ],
-  },
-  {
-    id: "c6",
-    kind: "axis",
-    axis: "mode",
-    prompt: "拿到新工具或者新玩具，你…",
-    options: [
-      { id: "c6L", label: "先按说明书用一遍", value: 1 },
-      { id: "c6R", label: "想拆开看看", value: -1 },
-    ],
-  },
-  {
-    id: "c7",
-    kind: "axis",
-    axis: "mode",
-    prompt: "空闲两小时，你更想…",
-    options: [
-      { id: "c7L", label: "动手做点什么，哪怕很糙", value: -1 },
-      { id: "c7R", label: "看点、听点好的", value: 1 },
-    ],
-  },
-  {
-    id: "c8",
-    kind: "axis",
-    axis: "mode",
-    prompt: "你更受不了的是…",
-    options: [
-      { id: "c8L", label: "一整天在忙，什么也没享受到", value: 1 },
-      { id: "c8R", label: "一整天只是输入，什么都没产出", value: -1 },
-    ],
-  },
-
-  // ── 节奏：D 深潜 / W 广谱 ──
-  {
-    id: "d1",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "过去一年，你更接近…",
-    options: [
-      { id: "d1L", label: "深耕一两件事", value: -1 },
-      { id: "d1R", label: "试了七八样", value: 1 },
-    ],
-  },
-  {
-    id: "d2",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "你的收藏夹…",
-    options: [
-      { id: "d2L", label: "什么都有，看不出规律", value: 1 },
-      { id: "d2R", label: "都是同一类东西的不同款", value: -1 },
-    ],
-  },
-  {
-    id: "d3",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "学新东西时，你…",
-    options: [
-      { id: "d3L", label: "想先把基础打透", value: -1 },
-      { id: "d3R", label: "先玩起来，卡住再查", value: 1 },
-    ],
-  },
-  {
-    id: "d4",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "你更享受…",
-    options: [
-      { id: "d4L", label: "什么都懂一点，跟谁都能聊", value: 1 },
-      { id: "d4R", label: "成为小圈子里最懂的人", value: -1 },
-    ],
-  },
-  {
-    id: "d5",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "你的周末更常是…",
-    options: [
-      { id: "d5L", label: "去同一个地方，做同一件事", value: -1 },
-      { id: "d5R", label: "每次都想换个新的", value: 1 },
-    ],
-  },
-  {
-    id: "d6",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "碰到一个感兴趣的话题，你…",
-    options: [
-      { id: "d6L", label: "看看就过，转头又被别的吸引", value: 1 },
-      { id: "d6R", label: "会一路挖到底", value: -1 },
-    ],
-  },
-  {
-    id: "d7",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "你更受不了的是…",
-    options: [
-      { id: "d7L", label: "一直在浅层打转，什么都没深入", value: -1 },
-      { id: "d7R", label: "被一件事绑住，别的都错过", value: 1 },
-    ],
-  },
-  {
-    id: "d8",
-    kind: "axis",
-    axis: "tempo",
-    prompt: "你屋里更可能是…",
-    options: [
-      { id: "d8L", label: "各种半途而废的小玩意", value: 1 },
-      { id: "d8R", label: "一整套相关的装备", value: -1 },
-    ],
+    key: "deep",
+    label: "深度版",
+    desc: "每轴 12 句，边界情况也能分出高下",
+    tier: 3,
   },
 ];
+
+type AxisSeed = {
+  id: string;
+  axis: Axis;
+  direction: -1 | 1;
+  statement: string;
+};
+
+/**
+ * 48 句陈述，按轴排、每轴 12 句。
+ * 1-4 句进快速版，5-8 句进标准版，9-12 句只有深度版才问。
+ * 每轴两端各占一半，且顺序交替，避免整体偏向某一端。
+ */
+const AXIS_SEEDS: AxisSeed[] = [
+  // ── 场域：I 室内 / O 户外 ──
+  { id: "a1", axis: "field", direction: -1, statement: "多出一个没安排的周六，我更想把家里某个角落收拾一遍" },
+  { id: "a2", axis: "field", direction: 1, statement: "天气好的下午待在家里，会让我觉得有点浪费" },
+  { id: "a3", axis: "field", direction: -1, statement: "约朋友见面，在家里比在外面自在" },
+  { id: "a4", axis: "field", direction: 1, statement: "空出来的两小时，我更想出门走一条没走过的路" },
+  { id: "a5", axis: "field", direction: -1, statement: "我的相册里多是房间里的光、桌上的东西和吃的" },
+  { id: "a6", axis: "field", direction: 1, statement: "在外面待了一整天，回家前我还想再走一段" },
+  { id: "a7", axis: "field", direction: -1, statement: "学一样新东西，我更喜欢在家看教程、自己慢慢试" },
+  { id: "a8", axis: "field", direction: 1, statement: "连着几天没出门，我会觉得闷" },
+  { id: "a9", axis: "field", direction: -1, statement: "周末要是没人叫我，我大概一整天都不会出门" },
+  { id: "a10", axis: "field", direction: 1, statement: "逛街不一定买东西，光是在外面走走就值了" },
+  { id: "a11", axis: "field", direction: -1, statement: "我更喜欢在自己熟悉的空间里见人" },
+  { id: "a12", axis: "field", direction: 1, statement: "换个城市待几天，比在家待着更让我恢复" },
+
+  // ── 社交：S 独处 / G 结伴 ──
+  { id: "b1", axis: "social", direction: -1, statement: "周五晚上，我最想要的是谁也别来找我" },
+  { id: "b2", axis: "social", direction: 1, statement: "一群人闹到一起的那种热闹，很对我的胃口" },
+  { id: "b3", axis: "social", direction: -1, statement: "去一个只认识主人的饭局，我会先找个角落观察" },
+  { id: "b4", axis: "social", direction: 1, statement: "旅行我更愿意拉上一伙人，而不是一个人走" },
+  { id: "b5", axis: "social", direction: -1, statement: "遇到特别想分享的东西，我会先自己消化几天" },
+  { id: "b6", axis: "social", direction: 1, statement: "我更舒服的状态是认识很多人、随时都能约到人" },
+  { id: "b7", axis: "social", direction: -1, statement: "和很多人待了一整天，我需要独处很久才能回血" },
+  { id: "b8", axis: "social", direction: 1, statement: "一整个周末没人说话，我会难受" },
+  { id: "b9", axis: "social", direction: -1, statement: "聚会结束的时候，我常常会觉得松了一口气" },
+  { id: "b10", axis: "social", direction: 1, statement: "一个人待久了，我会想约人出来" },
+  { id: "b11", axis: "social", direction: -1, statement: "比起认识新朋友，我更愿意和老朋友待着" },
+  { id: "b12", axis: "social", direction: 1, statement: "有陌生人的场合，我通常会主动开口" },
+
+  // ── 姿态：M 创造 / T 体验 ──
+  { id: "c1", axis: "mode", direction: -1, statement: "看到一件好看的东西，我更想弄清楚它是怎么做的" },
+  { id: "c2", axis: "mode", direction: 1, statement: "我刷到的内容多是「我去了、我吃了、我看了」" },
+  { id: "c3", axis: "mode", direction: -1, statement: "一趟旅行回来，我更可能做本小册子或者剪条视频" },
+  { id: "c4", axis: "mode", direction: 1, statement: "比起自己做出来，遇到好东西更让我满足" },
+  { id: "c5", axis: "mode", direction: -1, statement: "朋友会说我是个总在折腾点什么的人" },
+  { id: "c6", axis: "mode", direction: 1, statement: "拿到新工具，我会先按说明书用一遍" },
+  { id: "c7", axis: "mode", direction: -1, statement: "空闲两小时，我更想动手做点什么，哪怕很糙" },
+  { id: "c8", axis: "mode", direction: 1, statement: "一整天在忙却没享受到什么，我会觉得亏" },
+  { id: "c9", axis: "mode", direction: -1, statement: "我常常边看教程边自己上手改" },
+  { id: "c10", axis: "mode", direction: 1, statement: "我更愿意把钱花在体验上，而不是买工具" },
+  { id: "c11", axis: "mode", direction: -1, statement: "手上有活儿的时候，我最放松" },
+  { id: "c12", axis: "mode", direction: 1, statement: "看别人做得好，比自己做得好更让我满足" },
+
+  // ── 节奏：D 深潜 / W 广谱 ──
+  { id: "d1", axis: "tempo", direction: -1, statement: "过去一年，我主要在深耕一两件事" },
+  { id: "d2", axis: "tempo", direction: 1, statement: "我的收藏夹里什么都有，看不出规律" },
+  { id: "d3", axis: "tempo", direction: -1, statement: "学新东西，我想先把基础打透再往上走" },
+  { id: "d4", axis: "tempo", direction: 1, statement: "我更享受什么都懂一点、跟谁都能聊" },
+  { id: "d5", axis: "tempo", direction: -1, statement: "我的周末常常是同一个地方、同一件事" },
+  { id: "d6", axis: "tempo", direction: 1, statement: "碰到感兴趣的话题，我看看就过，转头又被别的吸引" },
+  { id: "d7", axis: "tempo", direction: -1, statement: "一直在浅层打转，会让我难受" },
+  { id: "d8", axis: "tempo", direction: 1, statement: "屋里堆着各种半途而废的小玩意，这很像我" },
+  { id: "d9", axis: "tempo", direction: -1, statement: "同一个游戏、同一部剧，我能反复用好几年" },
+  { id: "d10", axis: "tempo", direction: 1, statement: "手机里装了一堆试过一次就再没打开的东西" },
+  { id: "d11", axis: "tempo", direction: -1, statement: "我更愿意把一件事练到比大部分人好" },
+  { id: "d12", axis: "tempo", direction: 1, statement: "朋友说我兴趣换得比换季还快" },
+];
+
+const AXIS_QUESTIONS: Question[] = AXIS_SEEDS.map(
+  (seed, index): AxisQuestion => ({
+    ...seed,
+    kind: "axis",
+    // 每轴 12 句：1-4 → 快速版，5-8 → 标准版，9-12 → 深度版
+    tier: (Math.floor((index % 12) / 4) + 1) as 1 | 2 | 3,
+  }),
+);
 
 export const TAG_LABELS: Record<string, string> = {
   // 常玩
@@ -604,5 +393,45 @@ const PRACTICAL_QUESTIONS: Question[] = [
   },
 ];
 
-export const QUESTIONS: Question[] = [...AXIS_QUESTIONS, ...PRACTICAL_QUESTIONS];
+/** 具体题的档位：四道「你真正会做的事」进快速版，四道偏好题标准版才问 */
+const PRACTICAL_TIER: Record<string, 1 | 2> = {
+  p1: 1,
+  p2: 1,
+  p3: 1,
+  p8: 1,
+  p4: 2,
+  p5: 2,
+  p6: 2,
+  p7: 2,
+};
+
+export const QUESTIONS: Question[] = [
+  ...AXIS_QUESTIONS,
+  ...PRACTICAL_QUESTIONS.map(
+    (question): Question => ({
+      ...question,
+      tier: PRACTICAL_TIER[question.id] ?? 2,
+    }),
+  ),
+];
+
 export const TOTAL_QUESTIONS = QUESTIONS.length;
+
+const TIER_OF: Record<QuizMode, 1 | 2 | 3> = {
+  quick: 1,
+  standard: 2,
+  deep: 3,
+};
+
+/** 按档位取题：深度版包含标准版，标准版包含快速版 */
+export function questionsFor(mode: QuizMode): Question[] {
+  const max = TIER_OF[mode];
+  return QUESTIONS.filter((question) => (question.tier ?? 2) <= max);
+}
+
+/** 给首页 / 选择页显示用的概览 */
+export function modeSummary(mode: QuizMode): { count: number; minutes: number } {
+  const count = questionsFor(mode).length;
+  // 每题按 9 秒估，另加开头交代的时间
+  return { count, minutes: Math.max(2, Math.round((count * 9) / 60)) };
+}

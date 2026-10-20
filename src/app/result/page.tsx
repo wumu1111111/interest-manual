@@ -19,7 +19,7 @@ export async function generateMetadata({
   const owner = payload.n ? `${payload.n}的` : "";
   const description = profile
     ? `${profile.name}：${profile.slogan}。怎么约、送什么、别碰什么，都在这一页。`
-    : "40 道题，出一份能让朋友照着做的兴趣说明书。";
+    : "陈述句 + 五级认同度，出一份能让朋友照着做的兴趣说明书。";
 
   // 链接预览直接用这张人人的专属卡片
   const card = `/api/card?d=${encodeURIComponent(d as string)}`;

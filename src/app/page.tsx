@@ -65,8 +65,8 @@ export default function Home() {
 
             <div className="rise" style={{ animationDelay: "130ms" }}>
               <p className="mt-7 max-w-md text-[15px] leading-7 text-muted sm:text-[16px]">
-                40 道题，8 分钟，出一份能直接发出去的说明书：
-                怎么约你、送什么、什么千万别碰。
+                20 道题起步，最多 56 道，五分钟起：
+                出一份能直接发出去的说明书，怎么约你、送什么、什么千万别碰。
               </p>
             </div>
 
@@ -93,7 +93,7 @@ export default function Home() {
                 <Mascot pose="wave" className="h-20 w-20 shrink-0" />
                 <div className="relative mb-3 max-w-[13rem] rounded-2xl rounded-bl-md border border-line bg-white/85 px-3.5 py-2 text-[11px] leading-5 text-ink/70 shadow-[0_10px_26px_-22px_rgba(31,27,22,0.9)]">
                   <span className="absolute -left-[5px] top-1/2 size-2.5 -translate-y-1/2 rotate-45 rounded-[2px] border-b border-l border-line bg-white/85" />
-                  40 道题，我陪你做完
+                  题量你挑，我陪你做完
                 </div>
               </div>
               <p className="mt-4 text-[11px] leading-5 text-muted">

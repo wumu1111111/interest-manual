@@ -693,7 +693,7 @@ export default function ShareCard({
           >
             <span style={{ fontSize: 21, color: INK }}>扫码看完整版</span>
             <span style={{ fontSize: 17, color: MUTED, marginTop: 6 }}>
-              40 道题 · 8 分钟 · 还能让朋友猜猜你
+              20 / 40 / 56 题 · 还能让朋友猜猜你
             </span>
           </div>
         </div>

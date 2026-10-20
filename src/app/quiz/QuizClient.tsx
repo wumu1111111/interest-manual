@@ -3,9 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AXES, QUESTIONS, TOTAL_QUESTIONS } from "@/lib/quiz-data";
+import {
+  AXES,
+  QUIZ_MODES,
+  SCALE,
+  modeSummary,
+  questionsFor,
+  type QuizMode,
+} from "@/lib/quiz-data";
 import { axisScores, encodePayload, typeCodeOf } from "@/lib/score";
-import { allAxisBits, bitsFromChoices } from "@/lib/guess";
+import { ratingsFromAnswers } from "@/lib/guess";
 import { TYPE_BY_CODE } from "@/lib/type-profiles";
 import Mascot, { MascotHead } from "@/components/mascot";
 import type { Question } from "@/lib/types";
@@ -15,14 +22,14 @@ type PrefField = "invite" | "duration" | "spend" | "group";
 
 const SINGLE_QID: Record<PrefField, string> = (() => {
   const map: Partial<Record<PrefField, string>> = {};
-  for (const question of QUESTIONS) {
+  for (const question of questionsFor("deep")) {
     if (question.kind === "single") map[question.field] = question.id;
   }
   return map as Record<PrefField, string>;
 })();
 
 /** 40 题很容易中途刷新，进度存在本地，回来接着答 */
-const STORAGE_KEY = "interest-manual:quiz:v1";
+const STORAGE_KEY = "interest-manual:quiz:v2";
 
 function sectionLabel(question: Question): string {
   if (question.kind === "axis") {
@@ -35,9 +42,14 @@ function sectionLabel(question: Question): string {
 
 export default function QuizClient() {
   const router = useRouter();
+  const [mode, setMode] = useState<QuizMode>("standard");
+  const [stage, setStage] = useState<"choose" | "quiz">("choose");
   const [step, setStep] = useState(0);
   // 同步锁：防止快速双击在同一个 tick 里跳过两题
   const lockRef = useRef(false);
+  /** 四轴题的认同度：-2..2 */
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  /** 单选题（邀约/时长/花钱/进新群）的选项 id */
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [multi, setMulti] = useState<Record<MultiGroup, string[]>>({
     played: [],
@@ -48,8 +60,11 @@ export default function QuizClient() {
   const [name, setName] = useState("");
   const [ready, setReady] = useState(false);
 
-  const question: Question | undefined = QUESTIONS[step];
-  const finished = step >= TOTAL_QUESTIONS;
+  /** 当前档位要问的题 */
+  const list = useMemo(() => questionsFor(mode), [mode]);
+  const total = list.length;
+  const question: Question | undefined = list[step];
+  const finished = step >= total;
 
   // 首次挂载时恢复进度；恢复完再渲染，避免闪一下第 1 题。
   // 这里必须在 effect 里 setState（localStorage 只有客户端才有），
@@ -62,13 +77,20 @@ export default function QuizClient() {
         const saved = JSON.parse(raw) as {
           v?: number;
           step?: number;
+          mode?: QuizMode;
+          stage?: "choose" | "quiz";
+          ratings?: Record<string, number>;
           choices?: Record<string, string>;
           multi?: Record<MultiGroup, string[]>;
           wishlist?: string;
           name?: string;
         };
-        if (saved.v === 1 && typeof saved.step === "number") {
-          setStep(Math.min(Math.max(saved.step, 0), TOTAL_QUESTIONS));
+        if (saved.v === 2 && typeof saved.step === "number") {
+          const savedMode = saved.mode ?? "standard";
+          setMode(savedMode);
+          setStep(Math.min(Math.max(saved.step, 0), questionsFor(savedMode).length));
+          setStage(saved.stage ?? "choose");
+          setRatings(saved.ratings ?? {});
           setChoices(saved.choices ?? {});
           setMulti({
             played: saved.multi?.played ?? [],
@@ -92,12 +114,22 @@ export default function QuizClient() {
     try {
       window.localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ v: 1, step, choices, multi, wishlist, name }),
+        JSON.stringify({
+          v: 2,
+          step,
+          mode,
+          stage,
+          ratings,
+          choices,
+          multi,
+          wishlist,
+          name,
+        }),
       );
     } catch {
       // 存不下就算了，不影响答题
     }
-  }, [ready, step, choices, multi, wishlist, name]);
+  }, [ready, step, mode, stage, ratings, choices, multi, wishlist, name]);
 
   useEffect(() => {
     lockRef.current = false;
@@ -112,17 +144,33 @@ export default function QuizClient() {
   const goNext = useCallback(() => {
     if (lockRef.current) return;
     lockRef.current = true;
-    setStep((current) => Math.min(current + 1, TOTAL_QUESTIONS));
-  }, []);
+    setStep((current) => Math.min(current + 1, total));
+  }, [total]);
 
-  const choose = useCallback((questionId: string, optionId: string) => {
-    if (lockRef.current) return;
-    lockRef.current = true;
-    setChoices((prev) => ({ ...prev, [questionId]: optionId }));
-    window.setTimeout(() => {
-      setStep((current) => Math.min(current + 1, TOTAL_QUESTIONS));
-    }, 150);
-  }, []);
+  const choose = useCallback(
+    (questionId: string, optionId: string) => {
+      if (lockRef.current) return;
+      lockRef.current = true;
+      setChoices((prev) => ({ ...prev, [questionId]: optionId }));
+      window.setTimeout(() => {
+        setStep((current) => Math.min(current + 1, total));
+      }, 150);
+    },
+    [total],
+  );
+
+  /** 选认同度：记下 -2..2，然后自动进入下一题 */
+  const rate = useCallback(
+    (questionId: string, value: number) => {
+      if (lockRef.current) return;
+      lockRef.current = true;
+      setRatings((prev) => ({ ...prev, [questionId]: value }));
+      window.setTimeout(() => {
+        setStep((current) => Math.min(current + 1, total));
+      }, 170);
+    },
+    [total],
+  );
 
   const toggleMulti = useCallback(
     (group: MultiGroup, optionId: string, max: number) => {
@@ -147,13 +195,18 @@ export default function QuizClient() {
         return;
       }
       if (!question || question.kind === "text") return;
+
       const index = Number(event.key);
-      if (
-        !Number.isInteger(index) ||
-        index < 1 ||
-        index > Math.min(question.options.length, 9)
-      )
+      if (!Number.isInteger(index) || index < 1) return;
+
+      if (question.kind === "axis") {
+        // 1..5 对应 很不同意 .. 很同意
+        const level = SCALE[index - 1];
+        if (level) rate(question.id, level.value);
         return;
+      }
+
+      if (index > Math.min(question.options.length, 9)) return;
       const option = question.options[index - 1];
       if (question.kind === "multi") {
         toggleMulti(question.group, option.id, question.max);
@@ -163,14 +216,14 @@ export default function QuizClient() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [question, choose, back, toggleMulti]);
+  }, [question, choose, rate, back, toggleMulti]);
 
-  const scores = useMemo(() => axisScores(choices), [choices]);
+  const scores = useMemo(() => axisScores(ratings), [ratings]);
   const code = typeCodeOf(scores);
   const typeProfile = TYPE_BY_CODE[code];
 
   const progress = Math.round(
-    (Math.min(step, TOTAL_QUESTIONS) / TOTAL_QUESTIONS) * 100,
+    (Math.min(step, total) / total) * 100,
   );
 
   const start = () => {
@@ -188,8 +241,7 @@ export default function QuizClient() {
         group: choices[SINGLE_QID.group] ?? "",
       },
       wl: wishlist.trim() || undefined,
-      g: bitsFromChoices(choices),
-      ga: allAxisBits(choices).join(""),
+      r: ratingsFromAnswers(ratings),
     };
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -205,6 +257,86 @@ export default function QuizClient() {
     return <div className="min-h-dvh" />;
   }
 
+  // 先选题量：题越多，每轴分得越细
+  if (stage === "choose") {
+    return (
+      <div className="flex min-h-dvh flex-col">
+        <header className="mx-auto flex w-full max-w-xl items-center justify-between px-6 pt-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-[13px] text-muted transition-colors hover:text-ink"
+          >
+            <span className="size-2 rounded-full bg-accent" />
+            兴趣说明书
+          </Link>
+          <span className="text-[11px] text-muted">先选题量</span>
+        </header>
+
+        <main className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 pb-14">
+          <div className="my-auto w-full py-10">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-muted">
+              陈述句 · 五级认同度
+            </p>
+            <h1 className="mt-3 font-serif text-[2rem] leading-snug">
+              想做多细？
+            </h1>
+            <p className="mt-3 text-[13px] leading-7 text-muted">
+              题越多，四个维度分得越准。可以先做快速版，觉得有意思再回来做深度版——
+              同一套题，档位只是问多少句。
+            </p>
+
+            <div className="mt-7 space-y-3">
+              {QUIZ_MODES.map((item) => {
+                const summary = modeSummary(item.key);
+                const recommended = item.key === "standard";
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => {
+                      setMode(item.key);
+                      setStep(0);
+                      setStage("quiz");
+                    }}
+                    className="option flex w-full items-center justify-between gap-4 rounded-2xl border border-line bg-white px-5 py-4 text-left"
+                  >
+                    <span className="min-w-0">
+                      <span className="flex items-baseline gap-2">
+                        <span className="text-[15px] font-medium">
+                          {item.label}
+                        </span>
+                        {recommended ? (
+                          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] text-accent">
+                            推荐
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-5 text-muted">
+                        {item.desc}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-mono text-[15px]">
+                        {summary.count}
+                        <span className="ml-0.5 text-[11px] text-muted">题</span>
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-muted">
+                        约 {summary.minutes} 分钟
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="mt-6 text-[11px] leading-6 text-muted">
+              都是同一批陈述句，不分对错，中间那档表示「两边都行 / 都说不好」。
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex w-full max-w-2xl items-center justify-between px-6 pt-6">
@@ -216,7 +348,7 @@ export default function QuizClient() {
           兴趣说明书
         </Link>
         <span className="font-mono text-[11px] tracking-wider text-muted">
-          {Math.min(step + 1, TOTAL_QUESTIONS)} / {TOTAL_QUESTIONS}
+          {Math.min(step + 1, total)} / {total}
         </span>
       </header>
 
@@ -243,7 +375,7 @@ export default function QuizClient() {
                 {sectionLabel(question)}
               </p>
               <h1 className="mt-3 font-serif text-[1.55rem] leading-snug sm:text-[1.9rem]">
-                {question.prompt}
+                {question.kind === "axis" ? question.statement : question.prompt}
               </h1>
               {question.kind !== "axis" && question.hint ? (
                 <p className="mt-2.5 text-[12px] leading-6 text-muted">
@@ -251,7 +383,48 @@ export default function QuizClient() {
                 </p>
               ) : null}
 
-              {question.kind === "text" ? (
+              {question.kind === "axis" ? (
+                <div className="mt-9">
+                  <div className="flex items-stretch justify-between gap-1.5">
+                    {SCALE.map((level) => {
+                      const selected = ratings[question.id] === level.value;
+                      const size =
+                        level.value === 0
+                          ? 9
+                          : Math.abs(level.value) === 1
+                            ? 12
+                            : 15;
+                      return (
+                        <button
+                          key={level.value}
+                          data-selected={selected}
+                          onClick={() => rate(question.id, level.value)}
+                          className="option flex flex-1 flex-col items-center gap-2.5 rounded-2xl border border-line bg-white px-1 py-3.5"
+                        >
+                          <span
+                            className={`rounded-full border ${
+                              selected
+                                ? "border-accent bg-accent"
+                                : "border-ink/25 bg-paper-deep"
+                            }`}
+                            style={{ width: size, height: size }}
+                          />
+                          <span
+                            className={`text-[10px] leading-none ${
+                              selected ? "text-ink" : "text-muted"
+                            }`}
+                          >
+                            {level.short}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3.5 text-center text-[11px] leading-5 text-muted">
+                    按真实感受选就好，中间那档是「两边都行 / 都说不好」
+                  </p>
+                </div>
+              ) : question.kind === "text" ? (
                 <div className="mt-8">
                   <textarea
                     value={wishlist}
@@ -375,7 +548,7 @@ export default function QuizClient() {
                 >
                   ← 上一题
                 </button>
-                {question.kind !== "text" && question.kind !== "multi" ? (
+                {question.kind === "single" ? (
                   <>
                     <span className="text-line">|</span>
                     <span className="hidden sm:inline">
@@ -390,7 +563,7 @@ export default function QuizClient() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.24em] text-muted">
-                    40 / 40 · 完成
+                    {total} / {total} · 完成
                   </p>
                   <h1 className="mt-3 font-serif text-3xl">
                     你的说明书已经可以生成了

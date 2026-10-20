@@ -72,10 +72,20 @@ async function main() {
   await send("Page.enable");
   await send("Page.navigate", { url: START_URL });
   await sleep(1500);
-  // 进度会存在 localStorage，先清掉，保证从第 1 题开始
+  // 进度会存在 localStorage，先清掉，保证从选题量开始
   await evaluate("localStorage.clear()");
   await send("Page.reload");
   await sleep(1800);
+
+  // 选题量：默认走标准版
+  const picked = await evaluate(`(() => {
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('标准版'));
+    if (!btn) return 'not-found';
+    btn.click();
+    return 'ok';
+  })()`);
+  console.log("选择标准版:", picked);
+  await sleep(600);
 
   const stepScript = `(() => {
     const buttons = [...document.querySelectorAll('button')];
