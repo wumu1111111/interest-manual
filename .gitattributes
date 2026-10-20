@@ -1,0 +1,7 @@
+# 部署脚本必须在 Linux 上以 LF 运行，Windows 上的 CRLF 会让 bash 直接报错
+*.sh text eol=lf
+
+# 图片和字体按二进制处理，避免被换行转换破坏
+*.png binary
+*.webp binary
+*.ttf binary
