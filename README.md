@@ -6,13 +6,35 @@
 
 ## 部署（拿到一个能发给别人的地址）
 
+**已部署的实例**：<http://111.230.149.210/>（腾讯云轻量 Debian 13，systemd 托管在 80 端口）
+
+服务器上的日常操作：
+
+```bash
+bash /opt/interest-manual/deploy/update.sh   # 拉最新代码 + 重新构建 + 重启
+journalctl -u interest-manual -f              # 看日志
+systemctl status interest-manual              # 看状态
+```
+
+### 部署到自己的服务器
+
+```bash
+# 在服务器上（Debian / Ubuntu，root）
+curl -fsSL https://raw.githubusercontent.com/wumu1111111/interest-manual/main/deploy/bootstrap.sh -o /tmp/bootstrap.sh
+bash /tmp/bootstrap.sh
+```
+
+脚本会：加 2G swap（2G 内存直接 build 会 OOM）→ 装 Node 20+ 和 pnpm →
+拉仓库 → 构建 → 写 systemd 单元 → 起服务。80 端口被别的站点占着时会自动退到 8080
+（这时要去云厂商控制台防火墙放行该端口）。
+
+### 或者用 Vercel
+
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwumu1111111%2Finterest-manual)
 
-1. 点上面的按钮，用 GitHub 登录，选中 `interest-manual` 这个仓库；
-2. 直接 Deploy，不用配任何环境变量、不用数据库；
-3. 一两分钟后拿到 `https://interest-manual-xxx.vercel.app`，这个就是可以发给朋友的地址。
+点按钮 → 用 GitHub 登录 → Deploy，不用配环境变量。拿到 `https://xxx.vercel.app`。
 
-部署后可以（可选）在 Vercel 项目设置里加一条环境变量：
+可选环境变量（两种部署都适用）：
 
 ```
 NEXT_PUBLIC_SITE_URL = https://你的域名
@@ -21,7 +43,7 @@ NEXT_PUBLIC_SITE_URL = https://你的域名
 这样页面里的绝对地址（分享卡的 `og:image` 等）会用它，而不是部署域名。
 
 **为什么不用 GitHub Pages**：`/result`、`/guess` 是服务端渲染，`/api/card` 是接口，
-纯静态导出会把分享图和 SSR 都砍掉。Vercel 的免费额度对这个项目完全够用。
+纯静态导出会把分享图和 SSR 都砍掉。
 
 ## 跑起来
 
