@@ -16,8 +16,23 @@ REPO="${REPO:-https://github.com/wumu1111111/interest-manual.git}"
 APP_DIR="${APP_DIR:-/opt/interest-manual}"
 SERVICE="${SERVICE:-interest-manual}"
 PORT="${PORT:-80}"
-SITE_URL="${SITE_URL:-http://$(curl -fsS --max-time 3 https://api.ipify.org || echo localhost)}"
 NODE_MAJOR="${NODE_MAJOR:-22}"
+
+# 80 经常被机器上已有的站点（nginx 之类）占着，占了就自动退到 8080
+if ss -lnt 2>/dev/null | grep -qE "[:.]${PORT}[[:space:]]"; then
+  NEW_PORT="${FALLBACK_PORT:-8080}"
+  while ss -lnt 2>/dev/null | grep -qE "[:.]${NEW_PORT}[[:space:]]"; do
+    NEW_PORT=$((NEW_PORT + 1))
+  done
+  echo "==> 端口 ${PORT} 已被占用，改用 ${NEW_PORT}（记得在控制台防火墙放行）"
+  PORT="$NEW_PORT"
+fi
+
+if [ "$PORT" = "80" ]; then
+  SITE_URL="${SITE_URL:-http://$(curl -fsS --max-time 3 https://api.ipify.org || echo localhost)}"
+else
+  SITE_URL="${SITE_URL:-http://$(curl -fsS --max-time 3 https://api.ipify.org || echo localhost):${PORT}}"
+fi
 
 echo "==> 目标：$APP_DIR  端口 $PORT  对外地址 $SITE_URL"
 
@@ -38,14 +53,30 @@ if ! swapon --show 2>/dev/null | grep -q '/swapfile'; then
 fi
 
 # 3) Node + pnpm
-CURRENT_NODE="$(node -v 2>/dev/null | tr -d 'v' | cut -d. -f1 || echo 0)"
-if [ "${CURRENT_NODE:-0}" -lt "$NODE_MAJOR" ]; then
-  echo "==> 安装 Node $NODE_MAJOR"
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
-  apt-get install -y nodejs
+#    Debian 12/13 的仓库里就有 Node 20+，优先用它；不够再回落到官方二进制。
+if ! command -v node >/dev/null || [ "$(node -v | tr -d 'v' | cut -d. -f1)" -lt 20 ]; then
+  echo "==> 安装 Node（发行版仓库）"
+  apt-get install -y nodejs npm || true
 fi
-corepack enable >/dev/null 2>&1 || true
-corepack prepare pnpm@10 --activate >/dev/null 2>&1 || npm i -g pnpm@10
+
+if ! command -v node >/dev/null || [ "$(node -v | tr -d 'v' | cut -d. -f1)" -lt 20 ]; then
+  echo "==> 仓库版本不够，改用官方二进制"
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64) NARCH="x64" ;;
+    aarch64) NARCH="arm64" ;;
+    *) NARCH="x64" ;;
+  esac
+  VER="$(curl -fsSL https://nodejs.org/dist/index.json | grep -o '"version":"v22[^"]*"' | head -1 | cut -d'"' -f4)"
+  echo "==> node $VER"
+  curl -fsSL "https://nodejs.org/dist/${VER}/node-${VER}-linux-${NARCH}.tar.xz" -o /tmp/node.tar.xz
+  tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+fi
+
+if ! command -v pnpm >/dev/null; then
+  echo "==> 安装 pnpm"
+  npm i -g pnpm@10
+fi
 echo "==> node $(node -v) / pnpm $(pnpm -v)"
 
 # 4) 拉代码
