@@ -47,6 +47,10 @@ export default function QuizClient() {
   const [step, setStep] = useState(0);
   // 同步锁：防止快速双击在同一个 tick 里跳过两题
   const lockRef = useRef(false);
+  /** 当前这道题是什么时候出现的；用来估总作答时长（识别秒选） */
+  const tickRef = useRef<number | null>(null);
+  /** 累计停留毫秒数，和进度一起存在本地，续答不会把时间算丢 */
+  const [elapsedMs, setElapsedMs] = useState(0);
   /** 四轴题的认同度：-2..2 */
   const [ratings, setRatings] = useState<Record<string, number>>({});
   /** 单选题（邀约/时长/花钱/进新群）的选项 id */
@@ -84,6 +88,7 @@ export default function QuizClient() {
           multi?: Record<MultiGroup, string[]>;
           wishlist?: string;
           name?: string;
+          ms?: number;
         };
         if (saved.v === 2 && typeof saved.step === "number") {
           const savedMode = saved.mode ?? "standard";
@@ -99,6 +104,7 @@ export default function QuizClient() {
           });
           setWishlist(saved.wishlist ?? "");
           setName(saved.name ?? "");
+          setElapsedMs(typeof saved.ms === "number" ? saved.ms : 0);
         }
       }
     } catch {
@@ -124,39 +130,57 @@ export default function QuizClient() {
           multi,
           wishlist,
           name,
+          ms: elapsedMs,
         }),
       );
     } catch {
       // 存不下就算了，不影响答题
     }
-  }, [ready, step, mode, stage, ratings, choices, multi, wishlist, name]);
+  }, [ready, step, mode, stage, ratings, choices, multi, wishlist, name, elapsedMs]);
 
   useEffect(() => {
     lockRef.current = false;
   }, [step]);
 
+  // 换到下一题就重置计时的起点
+  useEffect(() => {
+    tickRef.current = Date.now();
+  }, [step, stage]);
+
+  /** 把当前这道题的停留时间结进总时长 */
+  const settle = useCallback(() => {
+    const now = Date.now();
+    const startedAt = tickRef.current;
+    tickRef.current = now;
+    if (startedAt === null) return;
+    setElapsedMs((prev) => prev + Math.max(0, now - startedAt));
+  }, []);
+
   const back = useCallback(() => {
     lockRef.current = false;
+    settle();
     setStep((current) => Math.max(0, current - 1));
-  }, []);
+  }, [settle]);
 
   /** 立刻前进一题，同一时刻只允许触发一次 */
   const goNext = useCallback(() => {
     if (lockRef.current) return;
     lockRef.current = true;
+    settle();
     setStep((current) => Math.min(current + 1, total));
-  }, [total]);
+  }, [total, settle]);
 
   const choose = useCallback(
     (questionId: string, optionId: string) => {
       if (lockRef.current) return;
       lockRef.current = true;
+      settle();
       setChoices((prev) => ({ ...prev, [questionId]: optionId }));
       window.setTimeout(() => {
         setStep((current) => Math.min(current + 1, total));
       }, 150);
     },
-    [total],
+    [total, settle],
   );
 
   /** 选认同度：记下 -2..2，然后自动进入下一题 */
@@ -164,12 +188,13 @@ export default function QuizClient() {
     (questionId: string, value: number) => {
       if (lockRef.current) return;
       lockRef.current = true;
+      settle();
       setRatings((prev) => ({ ...prev, [questionId]: value }));
       window.setTimeout(() => {
         setStep((current) => Math.min(current + 1, total));
       }, 170);
     },
-    [total],
+    [total, settle],
   );
 
   const toggleMulti = useCallback(
@@ -242,6 +267,7 @@ export default function QuizClient() {
       },
       wl: wishlist.trim() || undefined,
       r: ratingsFromAnswers(ratings),
+      t: elapsedMs > 0 ? Math.round(elapsedMs / 1000) : undefined,
     };
     try {
       window.localStorage.removeItem(STORAGE_KEY);

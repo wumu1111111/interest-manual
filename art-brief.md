@@ -49,6 +49,27 @@ node scripts/dsh-image.mjs --prompt "<house style + 具体画面>" --out public/
 4. 主体不要太满，留白要多——它要垫在网页内容后面，不能抢字。
 5. 线条要细、要平，不要厚涂、不要写实光影。
 
+## 16 型名片（`art-source/types/`）
+
+结果页的「名片」和分享图右侧都要用，所以构图比一般素材更死：
+
+- **竖版 9:16**（`--size 720*1280`），主体压在下三分之二，**顶部三分之一必须是空的米色纸**
+  （网页会把类型名、slogan 叠在上面）。
+- 主角统一是纸团角色：白色皱纸团 + 墨点眼睛 + 砖红腮红，不要长出手脚或写实五官。
+- 群像场景用「同款小纸团」表示伙伴，不要把伙伴画成别的角色。
+- 场景要一眼能读出这一型的味道（深夜台灯 / 山脊独行 / 篝火 / 一日游的行李箱…）。
+
+流程：
+
+```bash
+node scripts/gen-type-cards.mjs --n 2                # 16 型各 2 张候选
+node scripts/review-type-cards.mjs                    # 视觉验收，写 selection.json
+node scripts/optimize-art.mjs                         # 出 WebP（页面）+ PNG（分享图）
+```
+
+重出个别型号：`node scripts/gen-type-cards.mjs --only ismd,igtd --strict --n 3`。
+`--strict` 会追加「整幅必须是米色纸、不许糊深色背景」的硬约束，并换成压低了构图的 `strictScene`。
+
 ## 产出位置
 
 只写 `public/art/` 目录，**不要改 `src/` 下任何文件，不要重启 dev server**。

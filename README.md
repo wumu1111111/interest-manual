@@ -66,8 +66,8 @@ pnpm build && pnpm start
 | 路由 | 说明 |
 | --- | --- |
 | `/` | 落地页。移动优先，16 型可横滑查看，点开是完整的示例说明书 |
-| `/quiz` | 40 题答题流，键盘 1-4 选择、← 返回 |
-| `/result?d=...` | 结果页：类型、四轴、性格特点、兴趣分布、怎么约、雷区、偏好、分享 |
+| `/quiz` | 20 / 40 / 56 题答题流，键盘 1-5 选择、← 返回 |
+| `/result?d=...` | 结果页：类型、四轴（带置信带）、性格特点、兴趣分布、怎么约、雷区、偏好、名片、分享 |
 | `/guess?d=...` | 好友默契：朋友答 12 道二选一猜你，出默契度 + 逐题揭晓 |
 
 ## 目录
@@ -95,6 +95,43 @@ src/app/guess/GuessClient.tsx  默契测试
 - 四轴：场域 `I/O`（室内/户外）、社交 `S/G`（独处/结伴）、姿态 `M/T`（创造/体验）、节奏 `D/W`（深潜/广谱）。
 - 每句陈述都带 `direction`（这句话指向哪一端）。计分：`Σ(direction × 认同度) / (2 × 题数)`，落在 `-1..1`；
   `<= 0` 取左端字母，`> 0` 取右端。
+- 每句还带 `pair`（同轴相反极性的配对题），作答效度用它检查前后是否自相矛盾。
+
+### 出题顺序：交错，但不随机
+
+四轴题不按轴成块出现，而是**配对题 + 轴轮转**：
+
+```
+场域-室内句, 场域-户外句, 社交-独处句, 社交-结伴句, 姿态-创造句, 姿态-体验句, 节奏-深潜句, 节奏-广谱句,
+（下一轮换一个轴打头）...
+```
+
+好处是三重的：同一轴连续题不超过 2 道（避免启动效应）、同意/不同意严格交替、
+每轮开头轮换（避免总是同一个轴先出现）。顺序是**确定的**，不是随机——同一个人重测时题序一致，可比。
+行为题（p1-p8）不参与四轴计分，统一放在最后当缓冲带。
+
+### 分数带不确定范围，不硬给字母
+
+`axisStats()` 除了算分，还算一条**标准误（SEM）**：同一条轴上各题带方向态度的标准差 / √题数。
+答得越自洽，SEM 越小；一会儿说「很室内」一会儿说「很户外」，SEM 就变大。结果页把它画成四根轴上的半透明带：
+
+- `|分数| < max(SEM, 0.1)` 的轴标成**倾向模糊**，字母不加深，并在卡片下方提示「另一种可能」——
+  即翻转这条轴得到的相邻类型（如 ISMD ≈ OSMD）。不是把你说成两个人，只是那条轴本来就不该一刀切。
+- 老链接没有逐题答案时，SEM 退化为 0，页面和以前一样，不会误报。
+
+### 作答效度：温和提示，不拒绝出结果
+
+`validityOf(payload)` 只看两个字段：逐题态度串 `r` 和总用时 `t`，四个指标：
+
+| 指标 | 检测什么 | 触发阈值 |
+| --- | --- | --- |
+| longstring | 最长连续同分串（一路点同一个） | ≥ 12 题 |
+| IRV | 全卷态度方差过低（机械作答） | < 0.35 |
+| 配对冲突 | 相反配对题方向打架 | ≥ 2 组且 ≥ 25% |
+| 作答速度 | 平均每题秒数 | < 1.5 秒 |
+
+命中就结果页底部加一条「关于这份结果」的说明，语气是提醒不是判决——
+兴趣题没有对错，只有「这份结果可以怎么读」。
 
 ### 题量分档
 
@@ -181,6 +218,19 @@ wl  心愿单        g   默契测试的 12 位答案（0/1）
 | `glow.webp` | 备用的光晕底纹 | 1184 KB | 53 KB |
 | `sprig.webp` | 结果页卡片右下角的植物水印 | 1161 KB | 69 KB |
 | `pair.webp` | 默契页「两个并排坐着的人」 | 1063 KB | 47 KB |
+| `types/<code>.webp` | 16 型名片插画（纸团主角 × 该型场景，720×1280） | ~1100 KB | ~120 KB |
+| `types/<code>.png` | 分享图里嵌的同图（480×853 调色板 PNG，satori 只认 PNG） | — | ~150 KB |
+
+### 16 型名片的出图流程
+
+1. `scripts/gen-type-cards.mjs`：16 个场景 prompt（房子风格 + 纸团主角 + 场景 + 竖版留白），
+   每型一次调用出 2 张候选，落在 `art-source/types/<code>-1.png`、`<code>-2.png`。
+   首轮不合格的型号带 `--strict` 重出：追加「整幅必须是米色纸、不许糊深色背景」的硬约束，
+   并换成压低构图的 `strictScene`。
+2. `scripts/review-type-cards.mjs`：用 `qwen3-vl-plus` 逐张做视觉验收（有无文字、配色是否在五色板内、
+   背景是否干净、纸团角色、顶部留白、riso 风格、场景匹配、可爱度），结果写 `review-<code>.json`，
+   并汇总出 `art-source/types/selection.json`（每型选第几张）。
+3. `scripts/optimize-art.mjs` 读 `selection.json`，出上面那一对 WebP / PNG。
 
 出图命令：
 
@@ -236,17 +286,13 @@ API key 从 `~/.dsh/.credentials.yaml` 的 `refs.BAILIAN_API_KEY` 读取，不�
 
 ## 分享图（每份说明书一张）
 
-`GET /api/card?d=<payload>` 现场生成一张 1080×1440 的海报（PNG，约 220 KB）：
+`GET /api/card?d=<payload>` 现场生成一张 1080×1440 的海报（PNG）：左栏信息、右栏竖版名片插画。
 
 - 顶部编号（由 payload 哈希出 `NO. 19`，同一份说明书永远同一个号）
-- 类型名、四码、slogan
-- 四根轴（改成左右两段，谁占优谁加深）
-- 能约我 / 别约我
-- 一句最实用的建议（`type.how[0]`）
-- **这一型专属的纸团**：16 型各有一套姿态和道具（铅笔 / 帽子 / 耳机 / 杯子 / 花 / 围巾 / 叶子 / 眼镜），
-  用 div 画的（satori 里用不了内联 SVG，`react-dom/server` 在 route 里也被 Next 禁了）
+- 左栏：类型名、四码、slogan、四根轴（左右两段，谁占优谁加深）、能约我 / 别约我、一句最实用的建议（`type.how[0]`）
+- 右栏：**这一型的名片插画**（按类型码取 `public/art/types/<code>.png`，运行时读盘 + 内存缓存），
+  下面一句「转给朋友，让他们照着这个约我」
 - **二维码**：扫开就是这份说明书的完整页面（`qrcode` 生成 SVG，透明底，跟纸色贴合）
-- **底部静物条**：从那张 AI 插画里裁一条，顶上加纸色渐变把接缝化开
 
 结果页「发给朋友」里有个下载链接，链接预览（`og:image`）也指向这张图，所以发到群里时预览就是本人那张卡片。
 
@@ -258,8 +304,9 @@ API key 从 `~/.dsh/.credentials.yaml` 的 `refs.BAILIAN_API_KEY` 读取，不�
 四个坑记一下：
 1. 子集里不能留可变字体的 `fvar/gvar/HVAR` 表，否则 satori 解析时崩（`Cannot read properties of undefined`）。
 2. `fontTools.varLib.instancer.instantiateVariableFont` 默认不修改原对象，必须接返回值，否则两个字重其实是同一份。
-3. satori 解不了 WebP 的 data URI，静物条得用 PNG。
-4. 静物条的纸色要**在裁切之后**再对齐，不然连同补边一起被映射，边缘会发紫。
+3. satori 解不了 WebP 的 data URI，名片得单独出一份 PNG。
+4. 海报里的插画按类型码取图（16 型各一张），`<img>` 给固定宽高、宽高比和原图一致（9:16），
+   不做 `object-fit` 裁切——避开 satori 的兼容坑。
 
 ## 默契题按类型挑
 
@@ -290,7 +337,10 @@ API key 从 `~/.dsh/.credentials.yaml` 的 `refs.BAILIAN_API_KEY` 读取，不�
   昵称是用户随便填的，可能超出子集。链接预览里的标题仍是完整昵称。
 - 字体文件放在 `src/assets/fonts/`，靠 `process.cwd()` 读取，`next start` 在仓库根目录跑没问题；
   如果之后要上 Vercel 之类的打包部署，需要把它们挪到会被 bundle 的位置（或改用 `outputFileTracingIncludes`）。
-- 海报里的纸团是用 div 画的（不是 SVG 组件），两边各自维护一份几何，改了要同步。
+- 16 张名片插画是 AI 生成的固定图，每种类型只有一张；想换风格要重跑
+  `gen-type-cards.mjs` + `review-type-cards.mjs` + `optimize-art.mjs` 三步。
+- 视觉验收是 `qwen3-vl-plus` 打的，不是人眼：文字、配色这类硬指标它抓得很准，但「可爱度」偏主观。
+- 配对冲突和 SEM 都依赖 `r` 字段；老链接只能退回「只给分数」的模式。
 - 老链接（只有 `g` 没有 `ga`）仍然用固定 12 题，看不到「按类型挑」的效果。
 - `glow.webp` 还没接到页面上（试过放在首屏，会和静物长卷抢戏，暂时留作备用）。
 
@@ -309,8 +359,10 @@ Edge 在这个版本里 `Page.navigate` 会重置 mobile 模拟，所以脚本�
 msedge --headless=new --remote-debugging-port=9222 --user-data-dir=%TEMP%\edge-test about:blank
 
 node scripts/dsh-image.mjs --prompt "..." --out public/art/x.png   # 百炼文生图
-node scripts/optimize-art.mjs              # 纸底对齐 + 抠底 + 转 WebP
-node scripts/e2e-quiz.mjs                  # 走完 40 题，打印最终链接和报错
+node scripts/gen-type-cards.mjs --from 0 --to 15 --n 2             # 16 型名片候选（可 --only、--strict 重出）
+node scripts/review-type-cards.mjs --from 0 --to 15                # 视觉验收 + 生成 selection.json
+node scripts/optimize-art.mjs              # 纸底对齐 + 抠底 + 转 WebP + 16 型名片两版
+node scripts/e2e-quiz.mjs                  # 走完一整套题，打印最终链接和报错
 node scripts/audit.mjs "/" "/quiz"         # 找出撑破 390px 视口的元素
 node scripts/mobile-shots.mjs 390 "/" "/quiz"   # 指定宽度的整页截图
 node scripts/guess-shots.mjs m390-guess "http://127.0.0.1:3000/guess?d=..."  # 默契流程截图

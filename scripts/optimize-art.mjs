@@ -10,7 +10,7 @@
  *
  * 读 art-source/*.png，写 public/art/*.webp。
  */
-import { readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 
@@ -125,46 +125,42 @@ for (const [name, config] of Object.entries(FINALS)) {
   );
 }
 
-// 海报底部那条静物：从已经对齐过纸色的 hero 里裁。
-// 直接裁下半截会把高个子的植物切头，所以整幅缩小后再取底部，
-// 左右补纸色凑满 1080 宽。satori 解不了 WebP，这里出一张 PNG。
-const heroOut = join(OUT, "hero.webp");
+// 16 型名片：按验收挑出的那张（art-source/types/selection.json）出两版——
+// 结果页用 720×1280 WebP，分享图用 480 宽的调色板 PNG（satori 解不了 WebP）。
 try {
-  // 整幅缩到 1080 宽，再取底部一条：宽度天然铺满，不用左右补边
-  const scaled = await sharp(heroOut)
-    .resize({ width: 1080 })
-    .png()
-    .toBuffer({ resolveWithObject: true });
-
-  const stripHeight = 280;
-  const cropped = await sharp(scaled.data)
-    .extract({
-      left: 0,
-      top: Math.max(0, scaled.info.height - stripHeight),
-      width: scaled.info.width,
-      height: Math.min(stripHeight, scaled.info.height),
-    })
-    .toBuffer();
-
-  // 对纸色：缩放后主色会漂，和海报底色对不上就会露出方块
-  const { dominant } = await sharp(cropped).stats();
-  const src = [dominant.r, dominant.g, dominant.b];
-  const k = src.map((v, i) => {
-    const scale = (PAGE_PAPER[i] - PAGE_INK[i]) / (v - PAGE_INK[i] || 1);
-    return Math.min(Math.max(scale, 0.9), 1.3);
-  });
-  const b = k.map((value, i) => PAGE_INK[i] - value * PAGE_INK[i]);
-
-  await sharp(cropped)
-    .linear(k, b)
-    .png({ compressionLevel: 9 })
-    .toFile(join(OUT, "card-strip.png"));
-
-  const meta = await sharp(join(OUT, "card-strip.png")).metadata();
-  const size = (await stat(join(OUT, "card-strip.png"))).size;
-  console.log(
-    `card-strip.png ${meta.width}x${meta.height} ${(size / 1024).toFixed(0)}KB`,
+  const end = join(OUT, "types");
+  await mkdir(end, { recursive: true });
+  const selection = JSON.parse(
+    await readFile(join(SRC, "types", "selection.json"), "utf8"),
   );
+  for (const [code, index] of Object.entries(selection)) {
+    if (!index) {
+      console.log(`跳过（没有可用候选）: ${code}`);
+      continue;
+    }
+    const input = join(SRC, "types", `${code}-${index}.png`);
+    const webpOut = join(end, `${code}.webp`);
+    const pngOut = join(end, `${code}.png`);
+
+    await sharp(input)
+      .resize({ width: 720, withoutEnlargement: true })
+      .webp({ quality: 86, effort: 5 })
+      .toFile(webpOut);
+
+    await sharp(input)
+      .resize({ width: 480 })
+      .png({ palette: true, colours: 160, dither: 0.4, compressionLevel: 9 })
+      .toFile(pngOut);
+
+    const [before, webp, png] = await Promise.all([
+      stat(input),
+      stat(webpOut),
+      stat(pngOut),
+    ]);
+    console.log(
+      `${code} ${(before.size / 1024).toFixed(0)}KB → webp ${(webp.size / 1024).toFixed(0)}KB / png ${(png.size / 1024).toFixed(0)}KB`,
+    );
+  }
 } catch (error) {
-  console.log("生成 card-strip 失败:", error.message);
+  console.log("名片处理失败:", error.message);
 }

@@ -4,17 +4,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import QRCode from "qrcode";
 import ShareCard from "@/components/share-card";
-import { decodePayload } from "@/lib/score";
+import { decodePayload, typeCodeOf } from "@/lib/score";
 
 export const runtime = "nodejs";
 
-let assets: {
-  regular: ArrayBuffer;
-  bold: ArrayBuffer;
-  strip: string;
-  stripWidth: number;
-  stripHeight: number;
-} | null = null;
+let fonts: { regular: ArrayBuffer; bold: ArrayBuffer } | null = null;
+
+/** 型号插画按型号缓存，同一张海报只读一次盘 */
+const artCache = new Map<string, string>();
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
@@ -23,25 +20,28 @@ function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   ) as ArrayBuffer;
 }
 
-async function loadAssets() {
-  if (assets) return assets;
-  const [regular, bold, stripBuffer] = await Promise.all([
+async function loadFonts() {
+  if (fonts) return fonts;
+  const [regular, bold] = await Promise.all([
     readFile(join(process.cwd(), "src/assets/fonts/card-500.ttf")),
     readFile(join(process.cwd(), "src/assets/fonts/card-700.ttf")),
-    readFile(join(process.cwd(), "public/art/card-strip.png")),
   ]);
-  // PNG 头里直接读宽高，免得为了两行数据把 sharp 拖进运行时依赖
-  const stripWidth = stripBuffer.readUInt32BE(16);
-  const stripHeight = stripBuffer.readUInt32BE(20);
-
-  assets = {
+  fonts = {
     regular: toArrayBuffer(regular),
     bold: toArrayBuffer(bold),
-    strip: `data:image/png;base64,${stripBuffer.toString("base64")}`,
-    stripWidth,
-    stripHeight,
   };
-  return assets;
+  return fonts;
+}
+
+async function artOf(code: string): Promise<string> {
+  const cached = artCache.get(code);
+  if (cached) return cached;
+  const buffer = await readFile(
+    join(process.cwd(), "public/art/types", `${code.toLowerCase()}.png`),
+  );
+  const src = `data:image/png;base64,${buffer.toString("base64")}`;
+  artCache.set(code, src);
+  return src;
 }
 
 /** 从链接里取一个稳定的两位编号，纯粹为了海报上的 "NO. 08" 好看 */
@@ -71,7 +71,10 @@ export async function GET(request: Request) {
     new URL(request.url).protocol.replace(":", "");
   const target = `${proto}://${host}/result?d=${encodeURIComponent(d)}`;
 
-  const loaded = await loadAssets();
+  const [loaded, artSrc] = await Promise.all([
+    loadFonts(),
+    artOf(typeCodeOf(payload.a)),
+  ]);
 
   const qrSvg = await QRCode.toString(target, {
     type: "svg",
@@ -85,9 +88,7 @@ export async function GET(request: Request) {
       payload,
       seq: sequenceOf(d),
       qrSrc: `data:image/svg+xml;base64,${Buffer.from(qrSvg).toString("base64")}`,
-      stripSrc: loaded.strip,
-      stripWidth: loaded.stripWidth,
-      stripHeight: loaded.stripHeight,
+      artSrc,
     }),
     {
       width: 1080,

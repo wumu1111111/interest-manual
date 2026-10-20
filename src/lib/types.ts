@@ -11,6 +11,11 @@ export interface AxisQuestion {
   direction: -1 | 1;
   /** 属于哪一档：1 快速版 / 2 标准版 / 3 深度版 */
   tier?: 1 | 2 | 3;
+  /**
+   * 相反极性的配对题 id（同轴、同子面、方向相反）。
+   * 作答效度用：两条都认真答的人，配对题的态度应该互为镜像。
+   */
+  pair?: string;
 }
 
 export interface MultiQuestion {
@@ -74,10 +79,12 @@ export interface ProfilePayload {
   /** 全部 32 道四轴题的答案，0/1 拼成的 32 位字符串，用来按类型挑题 */
   ga?: string;
   /**
-   * 32 道认同度，每题的 -2..2 加 2 后拼成 "0"-"4" 的字符串。
-   * 默契测试靠它挑题和判分。
+   * 48 道认同度，每题的 -2..2 加 2 后拼成 "0"-"4" 的字符串。
+   * 默契测试靠它挑题和判分；作答效度检测也只看它。
    */
   r?: string;
+  /** 整卷作答总秒数（新版才记），用来识别「秒选」；老链接没有 */
+  t?: number;
 }
 
 export interface TypeProfile {

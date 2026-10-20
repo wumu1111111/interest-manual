@@ -2,7 +2,7 @@ import { QUESTIONS } from "./quiz-data";
 import { AXIS_ORDER } from "./score";
 import type { Axis, AxisQuestion, ProfilePayload } from "./types";
 
-/** 全部 32 道四轴陈述句，顺序与 `r` 字段一致 */
+/** 全部 48 道四轴陈述句，顺序与 `r` 字段一致 */
 const AXIS_QUESTIONS = QUESTIONS.filter(
   (question): question is AxisQuestion => question.kind === "axis",
 );

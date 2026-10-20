@@ -123,7 +123,7 @@ const AXIS_SEEDS: AxisSeed[] = [
   { id: "c3", axis: "mode", direction: -1, statement: "一趟旅行回来，我更可能做本小册子或者剪条视频" },
   { id: "c4", axis: "mode", direction: 1, statement: "比起自己做出来，遇到好东西更让我满足" },
   { id: "c5", axis: "mode", direction: -1, statement: "朋友会说我是个总在折腾点什么的人" },
-  { id: "c6", axis: "mode", direction: 1, statement: "拿到新工具，我会先按说明书用一遍" },
+  { id: "c6", axis: "mode", direction: 1, statement: "东西到手，我更在意它好不好用，不太关心它是怎么做的" },
   { id: "c7", axis: "mode", direction: -1, statement: "空闲两小时，我更想动手做点什么，哪怕很糙" },
   { id: "c8", axis: "mode", direction: 1, statement: "一整天在忙却没享受到什么，我会觉得亏" },
   { id: "c9", axis: "mode", direction: -1, statement: "我常常边看教程边自己上手改" },
@@ -147,12 +147,18 @@ const AXIS_SEEDS: AxisSeed[] = [
 ];
 
 const AXIS_QUESTIONS: Question[] = AXIS_SEEDS.map(
-  (seed, index): AxisQuestion => ({
-    ...seed,
-    kind: "axis",
-    // 每轴 12 句：1-4 → 快速版，5-8 → 标准版，9-12 → 深度版
-    tier: (Math.floor((index % 12) / 4) + 1) as 1 | 2 | 3,
-  }),
+  (seed, index): AxisQuestion => {
+    // 每轴 12 句，内部是「左端一句 + 右端一句」交替，所以相邻的两句天然互为配对
+    const inAxis = index % 12;
+    const sibling = AXIS_SEEDS[index + (inAxis % 2 === 0 ? 1 : -1)];
+    return {
+      ...seed,
+      kind: "axis",
+      // 每轴 12 句：相邻两句为一对，1-4 → 快速版，5-8 → 标准版，9-12 → 深度版
+      tier: (Math.floor(inAxis / 4) + 1) as 1 | 2 | 3,
+      pair: sibling?.id,
+    };
+  },
 );
 
 export const TAG_LABELS: Record<string, string> = {
@@ -417,16 +423,54 @@ export const QUESTIONS: Question[] = [
 
 export const TOTAL_QUESTIONS = QUESTIONS.length;
 
+/** 四轴的固定出场顺序（交错出题时轮转用） */
+export const AXIS_ORDER: Axis[] = ["field", "social", "mode", "tempo"];
+
 const TIER_OF: Record<QuizMode, 1 | 2 | 3> = {
   quick: 1,
   standard: 2,
   deep: 3,
 };
 
-/** 按档位取题：深度版包含标准版，标准版包含快速版 */
+/**
+ * 按档位取题：深度版包含标准版，标准版包含快速版。
+ *
+ * 四轴题不再按轴成块出现，而是「配对题 + 轴轮转」交错：
+ * 每轮取四轴各一对（左端一句 + 右端一句），下一轮换个轴开头。
+ * 好处是三重的：同一轴的连续题不超过 2 道、同意/不同意严格交替、
+ * 每轮开头轮换，避免总是同一个轴打头造成启动效应。
+ * 行为题（p1-p8）不参与四轴计分，统一放在最后当缓冲带。
+ */
 export function questionsFor(mode: QuizMode): Question[] {
   const max = TIER_OF[mode];
-  return QUESTIONS.filter((question) => (question.tier ?? 2) <= max);
+  const byAxis: Record<Axis, AxisQuestion[]> = {
+    field: [],
+    social: [],
+    mode: [],
+    tempo: [],
+  };
+  for (const question of QUESTIONS) {
+    if (question.kind === "axis") byAxis[question.axis].push(question);
+  }
+
+  const interleaved: Question[] = [];
+  // 每档 2 / 4 / 6 对；配对题在种子里总是相邻（2k、2k+1），方向正好一左一右
+  for (let pairIndex = 0; pairIndex < max * 2; pairIndex += 1) {
+    for (let step = 0; step < AXIS_ORDER.length; step += 1) {
+      const list = byAxis[AXIS_ORDER[(step + pairIndex) % AXIS_ORDER.length]];
+      const first = list[pairIndex * 2];
+      const second = list[pairIndex * 2 + 1];
+      if (first) interleaved.push(first);
+      if (second) interleaved.push(second);
+    }
+  }
+
+  const practical = QUESTIONS.filter(
+    (question): question is Question =>
+      question.kind !== "axis" && (question.tier ?? 2) <= max,
+  );
+
+  return [...interleaved, ...practical];
 }
 
 /** 给首页 / 选择页显示用的概览 */
