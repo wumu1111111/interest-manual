@@ -4,9 +4,11 @@ const PORT = 9222;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const args = process.argv.slice(2);
 const width = Number(args[0]) || 390;
+const BASE = process.env.BASE ?? "http://127.0.0.1:3000";
 
 /**
  * 用法: node scripts/mobile-shots.mjs 390 "/" "/quiz"
+ *       BASE=http://1.2.3.4 node scripts/mobile-shots.mjs 390 "/quiz"
  *
  * 两个坑：
  * 1. Edge 在这个版本里，Page.navigate 会重置 mobile 模拟，所以先导航再设视口；
@@ -49,8 +51,8 @@ async function main() {
   await send("Page.enable");
 
   for (const path of paths) {
-    await send("Page.navigate", { url: `http://127.0.0.1:3000${path}` });
-    await sleep(1400);
+    await send("Page.navigate", { url: BASE + path });
+    await sleep(1500);
     await send("Emulation.setDeviceMetricsOverride", {
       width,
       height: 900,
@@ -71,8 +73,7 @@ async function main() {
       await new Promise((r) => setTimeout(r, 500));
     })()`);
 
-    // 把视口撑到整页高度再截图：captureBeyondViewport 会在截图瞬间改尺寸，
-    // 触发掉入场动画重播，截出来是半透明的。
+    // 把视口撑到整页高度再截图，避免 captureBeyondViewport 触发动画重播
     const fullHeight = await evaluate("document.body.scrollHeight");
     await send("Emulation.setDeviceMetricsOverride", {
       width,
