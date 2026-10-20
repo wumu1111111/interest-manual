@@ -253,7 +253,8 @@ export default function QuizClient() {
 
   const useChips = question?.kind === "multi" && question.options.length > 8;
 
-  if (!ready) {
+  // 选档界面不依赖 localStorage，SSR 就能直接渲染出来
+  if (!ready && stage === "quiz") {
     return <div className="min-h-dvh" />;
   }
 
