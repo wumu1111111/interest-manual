@@ -4,6 +4,25 @@
 
 当前进度：**M1 单人闭环 + M2 好友默契**，仍然没有后端（答案编码在链接里）。
 
+## 部署（拿到一个能发给别人的地址）
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwumu1111111%2Finterest-manual)
+
+1. 点上面的按钮，用 GitHub 登录，选中 `interest-manual` 这个仓库；
+2. 直接 Deploy，不用配任何环境变量、不用数据库；
+3. 一两分钟后拿到 `https://interest-manual-xxx.vercel.app`，这个就是可以发给朋友的地址。
+
+部署后可以（可选）在 Vercel 项目设置里加一条环境变量：
+
+```
+NEXT_PUBLIC_SITE_URL = https://你的域名
+```
+
+这样页面里的绝对地址（分享卡的 `og:image` 等）会用它，而不是部署域名。
+
+**为什么不用 GitHub Pages**：`/result`、`/guess` 是服务端渲染，`/api/card` 是接口，
+纯静态导出会把分享图和 SSR 都砍掉。Vercel 的免费额度对这个项目完全够用。
+
 ## 跑起来
 
 ```bash
@@ -16,6 +35,9 @@ pnpm dev        # http://localhost:3000
 ```bash
 pnpm build && pnpm start
 ```
+
+> 已经从干净 clone 验证过：`git clone` → `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm start`
+> 四个路由和分享图接口都正常。
 
 ## 页面
 
